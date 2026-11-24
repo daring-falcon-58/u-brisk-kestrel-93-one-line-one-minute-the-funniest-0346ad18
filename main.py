@@ -20,10 +20,16 @@ Deterministic, no network, no randomness: two runs produce byte-identical
 output. See README.md for the methodology.
 """
 
+import hashlib
 import os
 import re
 
 ENTRY = "I was 98% confident the deadline was next Tuesday. I trusted the 98%. The 2% was right."
+
+# sha256 of ENTRY encoded as UTF-8 (87 bytes, no trailing newline). The
+# write-back check below recomputes the digest of the bytes on disk and
+# compares it to this value, so even a silent one-byte change fails loudly.
+EXPECTED_SHA256 = "33e676752903ce40af663e46619c3e88aa0e6b462e11218ed1b7543e50122897"
 
 # The competition gate is 1-200 characters, one line, not only whitespace.
 # The brief's own constraints, enforced here at import time so a bad edit
@@ -70,11 +76,18 @@ def main() -> None:
     path = os.path.join(out_dir, "entry.txt")
     with open(path, "w", encoding="utf-8", newline="") as f:
         f.write(ENTRY)
-    # Verify the write: read the file back and compare bytes, so a partial
-    # write or encoding surprise fails loudly instead of submitting a
-    # corrupted entry.
-    if open(path, "rb").read() != ENTRY.encode("utf-8"):
+    # Verify the write: read the file back, compare bytes, then compare the
+    # sha256 digest of the read-back bytes against the expected digest, so a
+    # partial write, encoding surprise, or one-byte corruption fails loudly
+    # instead of submitting a corrupted entry.
+    written = open(path, "rb").read()
+    if written != ENTRY.encode("utf-8"):
         raise OSError(f"entry.txt at {path} does not match the entry")
+    digest = hashlib.sha256(written).hexdigest()
+    if digest != EXPECTED_SHA256:
+        raise OSError(
+            f"entry.txt sha256 {digest} != expected {EXPECTED_SHA256}"
+        )
 
 
 if __name__ == "__main__":
